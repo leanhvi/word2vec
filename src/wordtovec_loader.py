@@ -1,7 +1,7 @@
 from __future__ import division  # py3 "true division"
 
 import logging
-import sys
+import sys, re
 import numpy as np
 from numpy import dtype, fromstring
 from pyspark.sql.session import SparkSession
@@ -94,6 +94,16 @@ def index_elasticsearch(fname, index, doc_type, start, stop, mute=False):
         if stop is not None and count > stop:
             break
 
+def valid_word(s):
+    """
+    Validate if a word is meets requirements
+    :param s: String to be validate
+    :return: True if it is valid
+    """
+    pattern = "[a-z0-9_]+"
+    return re.fullmatch(pattern=pattern, string=s)
+
+
 def write_parquet(spark, srcFile, destFile, start, stop, mute=False):
     """
 
@@ -115,6 +125,8 @@ def write_parquet(spark, srcFile, destFile, start, stop, mute=False):
         if stop is not None and count >= stop:
             break
         word = i[0]
+        if not valid_word(word):
+            continue
         vector = (i[1] / np.linalg.norm(i[1])).tolist()
         data.append((count, word, vector))
         if not mute:
@@ -132,14 +144,14 @@ if __name__ == "__main__":
     vocab_size = 3000000
 
     srcFile = "/home/levi/word2vec/data/GoogleNews-vectors-negative300.bin"
-    destFile = "/home/levi/word2vec/data/wordtovec_google.parquet"
+    destFile = "/home/levi/word2vec/data/wordtovec_google_lower.parquet"
 
     sc = SparkContext()
     spark = SparkSession(sc)
-
-    for i in range(0, vocab_size, 50000):
+    step = 100000
+    for i in range(0, vocab_size, step):
         start = i
-        stop = i + 50000
+        stop = i + step
         stop = min(stop, vocab_size)
         write_parquet(spark=spark, srcFile=srcFile, destFile=destFile, start=start, stop=stop, mute=True)
         print("SUCCESS FROM %s TO %s" % (start, stop))
